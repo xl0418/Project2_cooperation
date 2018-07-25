@@ -74,7 +74,7 @@ def PopsplitNormal(mean, sigma):
     x = np.random.normal(mean,sigma,1)
     return(x if x>0 and x<1 else PopsplitNormal(mean,sigma))
 
-def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.0001, r=1,theta=0, Vmax=1, replicate=0):
+def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.0001, r=1,theta=0, Vmax=1, replicate=0,initrait=0,inipop=500):
     valid = True
     if replicate > 0:
         np.random.seed(replicate)  # set random seed
@@ -86,8 +86,8 @@ def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.0001, r=1,theta=0, Vmax=1, 
     V = np.zeros((td.evo_time + 1, td.total_species))  # trait vairance
 
     #  initialize condition for species trait and population
-    trait_RI_dr[0, (0, 1)] = 0  # trait for species
-    mu_pop, sigma_pop = 500, 10  # mean and standard deviation
+    trait_RI_dr[0, (0, 1)] = initrait  # trait for species
+    mu_pop, sigma_pop = inipop,10  # mean and standard deviation
     population_RI_dr[0, (0, 1)] = np.random.normal(mu_pop, sigma_pop, 2)
     V[0] = (1 / td.total_species)
     # pull event list
