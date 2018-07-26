@@ -1,4 +1,5 @@
-#Import desired functions
+import os
+import getpass
 import numpy as np
 from ABC_SMC_DVmodel import calibration, MCMC_ABC
 from DV_model_sim_along_phy import DVtraitsim_tree
@@ -13,7 +14,12 @@ scalar = 10000
 # Observation generated
 # Load the data for a given tree
 # The directory of the tree data
-file = 'C:\\Liang\\Googlebox\\Python\\Project2\\R-tree_sim\\example1\\'
+if getpass.getuser() == "Hanno":
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+else:
+    # Liang uses hard-coded path
+    dir_path = 'C:\\Liang\\Googlebox\\Python\\Project2\\R-tree_sim\\'
+file = dir_path + '\\example11\\'
 # Simulate data
 simresult = DVtraitsim_tree(file = file,replicate = 3, gamma1 = par_obs[0], a = par_obs[1],K = par_obs[2],scalar = scalar)
 # We only need the data at tips.
