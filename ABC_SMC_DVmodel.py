@@ -7,12 +7,13 @@ def PosNormal(mean, sigma):
     x = np.random.normal(mean,sigma,1)
     return(x if x>=0 else PosNormal(mean,sigma))
 
-def calibration(samplesize, priorpar, treefile,calidata_file,K,scalar):
+def calibration(samplesize, priorpar, treefile,calidata_file,K,scalar,crownage=15):
     collection = np.zeros(shape=(samplesize,2))
     cali_traitdata = ([])
     cali_popdata = ([])
     cali_vardata = ([])
     par_picked = ([])
+    total_time = crownage*scalar
     for i in range(samplesize):
         do = 0
         while(do==0):
@@ -23,20 +24,21 @@ def calibration(samplesize, priorpar, treefile,calidata_file,K,scalar):
             par_cal[0] = uniform_gamma
             par_cal[1] = uniform_a
             par_picked.append(par_cal)
+            #single simulation; to be replaced by C++ simulation.
             sample_cal =  DVtraitsim_tree(file = treefile,scalar=scalar, replicate = 0,K = K, gamma1 = uniform_gamma,a = uniform_a)
-            if sample_cal[2]:
-                do = 1
+            if sample_cal[0]['simtime']< total_time:
+                do = 0
             else:
                 print('Retry')
-                do = 0
-        trait_RI_dr = sample_cal[0]
-        population_RI_dr = sample_cal[1]
-        traitVar = sample_cal[3]
-        evo_time, total_species = sample_cal[0].shape
-        evo_time = evo_time - 1
-        trait_dr_tips = trait_RI_dr[evo_time, :][~np.isnan(trait_RI_dr[evo_time, :])]
-        population_tips = population_RI_dr[evo_time, :][~np.isnan(population_RI_dr[evo_time, :])]
-        traitVar_tips = traitVar[evo_time, :][~np.isnan(traitVar[evo_time, :])]
+                do = 1
+        # prossessing tips data; remove nan values.
+        trait_RI_dr = sample_cal[0]['Z']
+        population_RI_dr = sample_cal[0]['N']
+        traitVar = sample_cal[0]['V']
+        trait_dr_tips = trait_RI_dr[~np.isnan(trait_RI_dr)]
+        population_tips = population_RI_dr[~np.isnan(population_RI_dr)]
+        traitVar_tips = traitVar[~np.isnan(traitVar)]
+        #collecte complete results and parameters
         collection[i] = np.array(par_cal)
         cali_traitdata.append(trait_dr_tips)
         cali_popdata.append(population_tips)
@@ -51,17 +53,18 @@ def calibration(samplesize, priorpar, treefile,calidata_file,K,scalar):
 
 
 # par = (gamma1, a, K)
-def ABC_acceptance(par,delta,obs,sort, scalar,file,abcmode='mean'):
+def ABC_acceptance(par,delta,obs,sort, scalar,file,abcmode='mean',crownage=15):
+    #Single simulation; to be replaced by C++ simulation.
     sim = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
-    if sim[2]:
-        trait_RI_dr = sim[0]
-        population_RI_dr = sim[1]
-        traitVar = sim[3]
-        evo_time, total_species = sim[0].shape
-        evo_time = evo_time - 1
-        trait_dr_tips = trait_RI_dr[evo_time, :][~np.isnan(trait_RI_dr[evo_time, :])]
-        population_tips = population_RI_dr[evo_time, :][~np.isnan(population_RI_dr[evo_time, :])]
-        traitVar_tips = traitVar[evo_time, :][~np.isnan(traitVar[evo_time, :])]
+    total_time = crownage * scalar
+    if sim[0]['simtime']< total_time:
+        # prossessing tips data; remove nan values.
+        trait_RI_dr = sim[0]['Z']
+        population_RI_dr = sim[0]['N']
+        traitVar = sim[0]['V']
+        trait_dr_tips = trait_RI_dr[~np.isnan(trait_RI_dr)]
+        population_tips = population_RI_dr[~np.isnan(population_RI_dr)]
+        traitVar_tips = traitVar[~np.isnan(traitVar)]
         sample = np.array([trait_dr_tips, population_tips, traitVar_tips])
 
         if sort == 0:
