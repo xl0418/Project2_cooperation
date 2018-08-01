@@ -140,8 +140,9 @@ def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.0001, r=1,theta=0, Vmax=1, 
                 # speciation
                 splitratio = PopsplitNormal(mean=0.5, sigma=0.2)
                 trait_RI_dr[i + 1, daughter] = trait_RI_dr[i + 1, parent]
-                population_RI_dr[i + 1, parent] = splitratio * population_RI_dr[i + 1, parent]
-                population_RI_dr[i + 1, daughter] = (1-splitratio)*population_RI_dr[i + 1, parent]
+                tmp_pop = population_RI_dr[i + 1, parent]
+                population_RI_dr[i + 1, parent] = splitratio * tmp_pop
+                population_RI_dr[i + 1, daughter] = (1 - splitratio) * tmp_pop
                 V[i + 1, parent] = 1 / 2 * V[i + 1, parent]
                 V[i + 1, daughter] = V[i + 1, parent]
             # advance to next event/node
