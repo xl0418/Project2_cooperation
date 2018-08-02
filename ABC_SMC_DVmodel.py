@@ -1,6 +1,8 @@
 import numpy as np
 from DV_model_sim_along_phy import DVtraitsim_tree
 import scipy.stats
+from scipy.stats import norm
+
 import timeit
 
 def PosNormal(mean, sigma):
@@ -141,3 +143,178 @@ def MCMC_ABC(startvalue, iterations,delta,obs,sort,priorpar, file,K,scalar, mcmc
     timetext = 'Elapsed time: %.2f' % elapse
     print(timetext)
     return MCMC
+
+
+
+# SMC ABC for model selection
+def SMC_ABC_MS(timestep, particlesize, obs, epsilon, prior, file,scalar,crownage, K, sort = 0):
+    tic = timeit.default_timer()
+    d = np.zeros(shape = (timestep, particlesize))  #distance matrix of simulations and obs
+    model = np.zeros(shape = (timestep, particlesize))
+    gamma = np.zeros(shape = (timestep, particlesize))  # gamma jumps
+    a =  np.zeros(shape = (timestep, particlesize))     # a  jumps
+    total_simulation = np.zeros(timestep)
+    total_time=crownage*scalar
+    # prior information [mean_gamma,var_gamma,mean_a,var_a]
+    gamma_prior_mean =  prior[0]
+    gamma_prior_var = prior[1]
+    a_prior_mean = prior[2]
+    a_prior_var = prior[3]
+    # Initialize thredhold
+    epsilon = epsilon
+    # Weight vectors for gamma and a
+    weight_gamma = np.zeros(shape = (timestep, particlesize))
+    weight_gamma.fill(1/particlesize)
+    weight_a = np.zeros(shape = (timestep, particlesize))
+    weight_a.fill(1/particlesize)
+    for t in range(timestep):
+        sim_count = 0
+        str = 'Time step : %d;' % t
+        #Initial round
+        if t == 0:
+            for i in range(particlesize):
+                str_p = str + ' Particle size : %d' % i
+                print(str_p)
+                d[t,i] = epsilon + 1
+                while d[t,i] > epsilon:
+                    sim_count += 1
+                    # Sample model and parameters uniformly
+                    propose_model = np.random.randint(4)
+                    propose_gamma = np.random.uniform(0,1,1)
+                    propose_a = np.random.uniform(0,1,1)
+                    if propose_model == 0:  # BM model
+                        # draw parameters from prior information
+                        propose_gamma = 0
+                        propose_a = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 1:  # Competition model
+                        # draw parameters from prior information
+                        propose_gamma = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 2: # OU model / Natural selection model
+                        # draw parameters from prior information
+                        propose_a = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 3: # Natural selection & competition model
+                        # draw parameters from prior information
+                        par = [propose_gamma,propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+
+                    if sample[0]['simtime']<total_time:
+                        diff=np.inf
+                    else:
+                        sampletrait = sample[0]['Z']     # np.array([sample[0], sample[2]])
+                        samplearray = sampletrait[~np.isnan(sampletrait)]
+                        obstrait = obs[0]['Z']                               # np.array([obs[0], obs[2]])
+                        obsarray = obstrait[~np.isnan(obstrait)]
+                        # calculate the distance between simulation and obs
+                        if sort == 0:
+                            diff = np.linalg.norm(samplearray - obsarray)
+                        else:
+                            samplearray_sort = samplearray[:, samplearray[0, :].argsort()]
+                            obsarray_sort = obsarray[:, obsarray[0, :].argsort()]
+                            diff = np.linalg.norm(samplearray_sort - obsarray_sort)
+                    d[t, i] = diff
+                # record the accepted values
+                gamma[t, i] = propose_gamma
+                a[t,i] = propose_a
+                model[t,i] = propose_model
+        else:
+            # shrink the threshold by 40 percentile for each time step
+            epsilon = np.append(epsilon, np.percentile(d[t-1,],40))
+            # calculate weighted variance of the parameters at previous time step
+            gamma_pre_mean = np.sum(gamma[t-1,] * weight_gamma[t-1,])
+            gamma_pre_var = np.sum(( gamma[t-1,] - gamma_pre_mean)**2 * weight_gamma[t-1,])
+            a_pre_mean = np.sum(a[t - 1,] * weight_a[t - 1,])
+            a_pre_var = np.sum((a[t - 1,] - a_pre_mean) ** 2 * weight_a[t - 1,])
+            for i in range(particlesize):
+                str_p = str + ' Particle size : %d' % i
+                print(str_p)
+                d[t, i] = epsilon[t] + 1
+                while d[t,i] > epsilon[t]:
+                    sim_count += 1
+                    # Sample model
+                    propose_model = np.random.randint(4)
+                    # sample the parameters by the weight
+                    sample_gamma_index = np.random.choice(particlesize,1, p = weight_gamma[t-1,])
+                    sample_a_index = np.random.choice(particlesize,1, p = weight_a[t-1,])
+                    # mean of the sample for gamma
+                    propose_gamma0 = gamma[t-1,sample_gamma_index-1]
+                    # draw new gamma with mean and variance
+                    propose_gamma = abs(np.random.normal(propose_gamma0,np.sqrt(2*gamma_pre_var)))
+                    # mean of the sample for a
+                    propose_a0 = a[t-1,sample_a_index-1]
+                    # draw new a with mean and variance
+                    propose_a = abs(np.random.normal(propose_a0,np.sqrt(2* a_pre_var)))
+                    if propose_model == 0:  # BM model
+                        # draw parameters from prior information
+                        propose_gamma = 0
+                        propose_a = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 1:  # Competition model
+                        # draw parameters from prior information
+                        propose_gamma = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 2: # OU model / Natural selection model
+                        # draw parameters from prior information
+                        propose_a = 0
+                        par = [propose_gamma, propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+                    elif propose_model == 3: # Natural selection & competition model
+                        # draw parameters from prior information
+                        par = [propose_gamma,propose_a,K]
+                        # simulate under the parameters
+                        sample = DVtraitsim_tree(file=file, scalar=scalar, replicate=0, gamma1=par[0], a=par[1], K=par[2])
+
+                    if sample[0]['simtime']<total_time:
+                        diff=np.inf
+                    else:
+                        sampletrait = sample[0]['Z']     # np.array([sample[0], sample[2]])
+                        samplearray = sampletrait[~np.isnan(sampletrait)]
+                        obstrait = obs[0]['Z']                               # np.array([obs[0], obs[2]])
+                        obsarray = obstrait[~np.isnan(obstrait)]
+                        # calculate the distance between simulation and obs
+                        if sort == 0:
+                            diff = np.linalg.norm(samplearray - obsarray)
+                        else:
+                            samplearray_sort = samplearray[:, samplearray[0, :].argsort()]
+                            obsarray_sort = obsarray[:, obsarray[0, :].argsort()]
+                            diff = np.linalg.norm(samplearray_sort - obsarray_sort)
+                    d[t, i] = diff
+                gamma[t, i] = propose_gamma
+                a[t,i] = propose_a
+                model[t,i] = propose_model
+                # compute new weights for gamma and a
+                weight_gamma_denominator = np.sum(weight_gamma[t-1,]* norm.pdf(propose_gamma,gamma[t-1,] ,
+                                                                               np.sqrt(2*gamma_pre_var)))
+                weight_gamma_numerator = norm.pdf(propose_gamma,gamma_prior_mean,gamma_prior_var)
+                weight_gamma[t,i] = weight_gamma_numerator / weight_gamma_denominator
+
+                weight_a_denominator = np.sum(weight_a[t - 1,] * norm.pdf(propose_a, a[t - 1,],
+                                                                                  np.sqrt(2 * a_pre_var)))
+                weight_a_numerator = norm.pdf(propose_a, a_prior_mean, a_prior_var)
+                weight_a[t, i] = weight_a_numerator / weight_a_denominator
+        # normalize the weights
+        total_simulation[t] = sim_count
+        weight_gamma[t,] = weight_gamma[t,]/sum(weight_gamma[t,])
+        weight_a[t,] = weight_a[t,]/sum(weight_a[t,])
+    # create the dictionary for output
+    SMC_ABC_model = {'gamma': gamma, 'a': a, 'model': model, 'weight_gamma':weight_gamma,'weight_a':weight_a,'error':epsilon,'diff':d,
+               'tot_sim':total_simulation}
+    toc = timeit.default_timer()
+    elapse = toc - tic
+    timetext = 'Elapsed time: %.2f' % elapse
+    print(timetext)
+    return SMC_ABC_model
