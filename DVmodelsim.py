@@ -161,7 +161,7 @@ def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.00000001,keep_alive=1, r=1,
                 tmp_pop = population_RI_dr[i + 1, parent]
                 if tmp_pop == 1:
                     valid = False
-                    print('Singleton is hit by a speciation')
+                    print('A singleton is hit by a speciation')
                     break
                 bisample = np.random.binomial(1, 0.5,tmp_pop)
                 population_RI_dr[i + 1, parent] = sum(bisample == 1)
