@@ -74,6 +74,13 @@ def PopsplitNormal(mean, sigma):
     x = np.random.normal(mean,sigma,1)
     return(x if x>0 and x<1 else PopsplitNormal(mean,sigma))
 
+# Sample function within a specific range (0,1)
+def PositivePoisson(lam):
+    x = np.random.poisson(lam,1)
+    return(x if x>0 else PositivePoisson(lam))
+
+PositivePoisson_vec = np.vectorize(PositivePoisson)
+
 def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.00000001,keep_alive=1, r=1,theta=0, Vmax=1, replicate=0,initrait=0,inipop=500):
     valid = True
     if replicate > 0:
@@ -112,7 +119,9 @@ def DVtraitsim_tree(file, gamma1, a, K, scalar, nu=0.00000001,keep_alive=1, r=1,
         var_trait = Vi / (2 * Ni)
         trait_RI_dr[i + 1, idx] = zi + Vi * (2 * gamma1 * dtz + 1 / Ki * sigma) + np.random.normal(0, var_trait, len(idx))
         possion_lambda = Ni * r * np.exp(-gamma1 * dtz**2 + (1 - beta / Ki))
-        population_RI_dr[i + 1, idx] = np.maximum(np.random.poisson(lam=possion_lambda),keep_alive)  #, size=(1, len(idx))
+        population_RI_dr[i + 1, idx] = PositivePoisson_vec(lam=possion_lambda) #, size=(1, len(idx))
+        if np.min(population_RI_dr[i + 1, idx])<100:
+            print(np.min(population_RI_dr[i + 1, idx]))
         V[i + 1, idx] = Vi / 2 + 2 * Ni * nu * Vmax / (1 + 4 * Ni * nu) \
                         + Vi ** 2 * (
                             -2 * gamma1 + 4 * gamma1**2 * dtz ** 2 +
